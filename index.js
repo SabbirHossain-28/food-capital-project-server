@@ -144,41 +144,44 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/menu/:id",async(req,res)=>{
-      const id=req.params.id;
-      const query={_id:new ObjectId(id)};
-      const result=await menuCollection.findOne(query);
+    app.get("/menu/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await menuCollection.findOne(query);
       res.send(result);
-    })
+    });
 
-    app.put("/menu/:id",verifyToken,verifyAdmin,async(req,res)=>{
-      const id=req.params.id;
-      const menuItemData=req.body;
+    app.put("/menu/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const menuItemData = req.body;
       console.log(menuItemData);
-      const filter={_id:new ObjectId(id)};
-      const options={upsert:true};
-      const updatedMenuItemData={
-        $set:{
-          ...menuItemData
-        }
-      }
-      const result=await menuCollection.updateOne(filter,updatedMenuItemData,options);
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedMenuItemData = {
+        $set: {
+          ...menuItemData,
+        },
+      };
+      const result = await menuCollection.updateOne(
+        filter,
+        updatedMenuItemData,
+        options
+      );
       res.send(result);
-    })
+    });
 
-    app.delete("/menu/:id",verifyToken,verifyAdmin, async (req, res) => {
+    app.delete("/menu/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       try {
-        const result=await menuCollection.deleteOne(query);
-        if(result.deletedCount===1){
-          res.status(200).send({message:"Menu item successfully deleted"})
-        }
-        else{
-          res.status(404).send({message:"Menu item not found"})
+        const result = await menuCollection.deleteOne(query);
+        if (result.deletedCount === 1) {
+          res.status(200).send({ message: "Menu item successfully deleted" });
+        } else {
+          res.status(404).send({ message: "Menu item not found" });
         }
       } catch (error) {
-        res.status(500).send({message:"An error occurred",error})
+        res.status(500).send({ message: "An error occurred", error });
       }
     });
 
@@ -212,31 +215,38 @@ async function run() {
     });
 
     // Payment related api
-    app.post("/create-payment-intent",async(req,res)=>{
-      const {price}=req.body;
-      const amount=parseInt(price*100);
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "usd",
-        payment_method_types:["card"],
+        payment_method_types: ["card"],
       });
       res.send({
-        clientSecret:paymentIntent.client_secret
-      })
-    })
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
 
-    app.post("/payments",async(re,res)=>{
-      const paymentInfo=req.body; 
-      const paymentResult=await paymentCollection.insertOne(paymentInfo);
+    app.post("/payments", async (req, res) => {
+      try {
+        const paymentInfo = req.body;
+        const paymentResult = await paymentCollection.insertOne(paymentInfo);
 
-      const query={_id:{
-        $in:paymentInfo.cardIds.map(id=>new ObjectId(id))
-      }}
-      const deleteResult=await cartCollection.deleteMany(query);
+        // Convert cart item IDs from strings to ObjectId instances
+        const cartItemObjectIds = paymentInfo.cartItemIds.map((id) =>
+          ObjectId.createFromHexString(id)
+        );
 
-      res.send(paymentResult,deleteResult)
-    })
+        const query = { _id: { $in: cartItemObjectIds } };
+        const deleteResult = await cartCollection.deleteMany(query);
+
+        res.status(200).send({ paymentResult, deleteResult });
+      } catch (error) {
+        res.status(500).send({ error: error.message });
+      }
+    });
 
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
