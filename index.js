@@ -82,8 +82,8 @@ async function run() {
 
     app.patch(
       "/users/admin/:id",
-      verifyAdmin,
       verifyToken,
+      verifyAdmin,
       async (req, res) => {
         const id = req.params.id;
         const filter = { _id: new ObjectId(id) };
@@ -257,7 +257,7 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/adminStats",verifyToken,verifyAdmin, async (req, res) => {
+    app.get("/adminStats", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.estimatedDocumentCount();
       const menuItems = await menuCollection.estimatedDocumentCount();
       const paymentCount = await paymentCollection.estimatedDocumentCount();
@@ -277,6 +277,48 @@ async function run() {
       const revenue = result.length > 0 ? result[0].totalRevenue : 0;
 
       res.send({ users, menuItems, paymentCount, revenue });
+    });
+
+    // Using aggregate pipeline
+    app.get("/orderStats",verifyToken,verifyAdmin, async (req, res) => {
+      const result = await paymentCollection
+        .aggregate([
+          {
+            $unwind: "$menuItemIds",
+          },
+          {
+            $lookup: {
+              from: "menu",
+              localField: "menuItemIds",
+              foreignField: "_id",
+              as: "menuItems",
+            },
+          },
+          {
+            $unwind: "$menuItems",
+          },
+          {
+            $group: {
+              _id: "$menuItems.category",
+              quantity: {
+                $sum: 1,
+              },
+              revenue: {
+                $sum: "$menuItems.price",
+              },
+            },
+          },
+          {
+            $project:{
+              _id:0,
+              category:"$_id",
+              quantity:"$quantity",
+              revenue:"$revenue"
+            }
+          }
+        ])
+        .toArray();
+      res.send(result);
     });
 
     // Connect the client to the server	(optional starting in v4.7)
